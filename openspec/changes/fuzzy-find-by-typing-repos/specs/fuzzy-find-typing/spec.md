@@ -1,26 +1,26 @@
 ## ADDED Requirements
 
-### Requirement: Direct typing filters repos in selector
-The system SHALL allow users to type characters directly to filter the repo list without requiring a '/' prefix.
+### Requirement: Filter input visible by default
+The system SHALL display the filter input field immediately when the repo selector opens, without requiring any keypress to activate it.
+
+#### Scenario: Filter visible on open
+- **WHEN** the repo selector is displayed
+- **THEN** the filter input field SHALL be visible at the top of the list
+- **AND** the user SHALL be able to type immediately to filter repos
+
+### Requirement: Direct typing always filters
+The system SHALL treat all printable character key presses as filter input at all times.
 
 #### Scenario: User types to filter repos
 - **WHEN** the repo selector is displayed
 - **AND** the user types "myrepo"
-- **THEN** the repo list SHALL be filtered to show only repos matching "myrepo"
+- **THEN** those characters SHALL appear in the filter input
+- **AND** the repo list SHALL be filtered to show only repos matching "myrepo"
 
 #### Scenario: Filter maintains navigation capability
-- **WHEN** the repo selector is in filter mode
+- **WHEN** the repo selector is displayed
 - **AND** the user presses Up/Down arrow keys
 - **THEN** the selection SHALL move up/down in the filtered list
-
-### Requirement: Character keys type into filter
-The system SHALL treat printable character key presses as filter input rather than navigation commands.
-
-#### Scenario: Character keys enter filter input
-- **WHEN** the repo selector is displayed
-- **AND** the user presses 'j' or 'k'
-- **THEN** those characters SHALL appear in the filter input
-- **AND** the repo list SHALL be filtered accordingly
 
 ### Requirement: Compact list item display
 The system SHALL display list items with minimal vertical padding to maximize the number of visible items.
@@ -33,7 +33,7 @@ The system SHALL display list items with minimal vertical padding to maximize th
 ## REMOVED Requirements
 
 ### Requirement: Vim-style filter trigger
-**Reason**: Direct typing replaces the '/' key requirement
+**Reason**: Filter input is always visible, no trigger key needed
 **Migration**: Users can now type immediately to filter; arrow keys replace j/k for navigation
 
 ### Requirement: 'j'/'k' navigation
