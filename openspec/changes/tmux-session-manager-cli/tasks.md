@@ -40,4 +40,4 @@
 
 - [x] 6.1 Initialize or verify local Git repository is on `main` branch
 - [x] 6.2 Create initial commit(s) for scaffold and implemented features
-- [ ] 6.3 Add GitHub remote and push branch to origin when credentials and repository are configured
+- [x] 6.3 Add GitHub remote and push branch to origin when credentials and repository are configured
