@@ -16,7 +16,6 @@ import (
 type Commander interface {
 	LookPath(file string) (string, error)
 	Run(args []string, dir string, in io.Reader, out, errOut io.Writer) error
-	DetachClient() error
 }
 
 type ExecCommander struct{}
@@ -31,28 +30,6 @@ func (ExecCommander) Run(args []string, dir string, in io.Reader, out, errOut io
 	cmd.Stdin = in
 	cmd.Stdout = out
 	cmd.Stderr = errOut
-	return cmd.Run()
-}
-
-func (ExecCommander) DetachClient() error {
-	cmd := exec.Command("tmux", "detach-client")
-	return cmd.Run()
-}
-
-// ReExecute re-runs the current tm command from outside the tmux session context.
-// It should be called after detaching from the current tmux session.
-func ReExecute() error {
-	execPath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
-	}
-
-	args := os.Args
-	cmd := exec.Command(execPath, args[1:]...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
 	return cmd.Run()
 }
 
@@ -87,27 +64,44 @@ func IsTerminal() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
+// SessionExists checks if a tmux session with the given name already exists
+func (l *Launcher) SessionExists(session string) bool {
+	args := []string{"has-session", "-t", session}
+	err := l.commander.Run(args, "", l.in, l.out, l.errOut)
+	return err == nil
+}
+
 func (l *Launcher) AttachOrCreate(targetPath string) error {
 	if _, err := l.commander.LookPath("tmux"); err != nil {
 		return fmt.Errorf("tmux is required but not available: %w", err)
 	}
 
-	// Check if running inside a tmux session and stdin is a TTY
-	// This avoids triggering detach in non-interactive scripts
+	session := SessionName(targetPath)
+
+	// Check if running inside a tmux session
 	if IsNestedSession() && IsTerminal() {
-		// Detach from current session
-		if err := l.commander.DetachClient(); err != nil {
-			return fmt.Errorf("failed to detach from current tmux session: %w", err)
+		// When inside tmux, we need to:
+		// 1. Create the session if it doesn't exist (detached)
+		// 2. Switch to it using switch-client
+
+		if !l.SessionExists(session) {
+			// Create session detached (-d flag)
+			createArgs := []string{"new-session", "-d", "-s", session, "-c", targetPath}
+			if err := l.commander.Run(createArgs, targetPath, l.in, l.out, l.errOut); err != nil {
+				return fmt.Errorf("tmux failed to create session %q: %w", session, err)
+			}
 		}
-		// Re-execute the tm command outside the tmux context
-		if err := ReExecute(); err != nil {
-			return fmt.Errorf("failed to re-execute command: %w", err)
+
+		// Switch to the session
+		switchArgs := []string{"switch-client", "-t", session}
+		if err := l.commander.Run(switchArgs, targetPath, l.in, l.out, l.errOut); err != nil {
+			return fmt.Errorf("tmux failed to switch to session %q: %w", session, err)
 		}
-		// ReExecute replaces the process, so we won't reach here on success
+
 		return nil
 	}
 
-	session := SessionName(targetPath)
+	// Not inside tmux - use standard attach/create
 	args := []string{"new-session", "-A", "-s", session, "-c", targetPath}
 	if err := l.commander.Run(args, targetPath, l.in, l.out, l.errOut); err != nil {
 		return fmt.Errorf("tmux failed for session %q: %w", session, err)
