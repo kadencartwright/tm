@@ -39,5 +39,5 @@
 ## 6. Git and Delivery Setup
 
 - [x] 6.1 Initialize or verify local Git repository is on `main` branch
-- [ ] 6.2 Create initial commit(s) for scaffold and implemented features
+- [x] 6.2 Create initial commit(s) for scaffold and implemented features
 - [ ] 6.3 Add GitHub remote and push branch to origin when credentials and repository are configured
