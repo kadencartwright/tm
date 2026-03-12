@@ -1,13 +1,14 @@
 package selector
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
 	"tm/internal/discovery"
@@ -32,13 +33,13 @@ func (c Choice) FilterValue() string {
 	return strings.TrimSpace(c.Label + "\n" + c.Details)
 }
 
-type BubbleSelector struct {
+type FzfSelector struct {
 	in  *os.File
 	out io.Writer
 }
 
-func NewBubbleSelector(in *os.File, out io.Writer) *BubbleSelector {
-	return &BubbleSelector{in: in, out: out}
+func NewFzfSelector(in *os.File, out io.Writer) *FzfSelector {
+	return &FzfSelector{in: in, out: out}
 }
 
 func IsTTY() bool {
@@ -63,83 +64,93 @@ func TargetChoices(targets []worktree.Target) []Choice {
 	return choices
 }
 
-func (s *BubbleSelector) Select(title string, items []Choice) (Choice, bool, error) {
-	listItems := make([]list.Item, 0, len(items))
-	for _, item := range items {
-		listItems = append(listItems, item)
-	}
-
-	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.PaddingLeft(0)
-	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.PaddingLeft(0)
-	delegate.Styles.NormalTitle = delegate.Styles.NormalTitle.PaddingLeft(0)
-	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.PaddingLeft(0)
-
-	l := list.New(listItems, delegate, 0, 0)
-	l.Title = title
-	l.SetShowStatusBar(false)
-	l.SetFilteringEnabled(true)
-	l.SetShowFilter(true)
-	l.SetShowHelp(true)
-
-	// Configure KeyMap: disable vim navigation (j/k), keep arrow keys only
-	keyMap := list.DefaultKeyMap()
-	keyMap.CursorUp.SetKeys("up")
-	keyMap.CursorDown.SetKeys("down")
-	keyMap.Filter.SetEnabled(false)
-	l.KeyMap = keyMap
-
-	// Start in filtering state so user can type immediately
-	l.SetFilterState(list.Filtering)
-
-	program := tea.NewProgram(selectionModel{list: l}, tea.WithInput(s.in), tea.WithOutput(s.out))
-	result, err := program.Run()
+func checkFzfInstalled() error {
+	_, err := exec.LookPath("fzf")
 	if err != nil {
-		return Choice{}, false, fmt.Errorf("run selector: %w", err)
+		return fmt.Errorf("fzf is required but not installed. Please install fzf: https://github.com/junegunn/fzf#installation")
+	}
+	return nil
+}
+
+func (s *FzfSelector) Select(title string, items []Choice) (Choice, bool, error) {
+	if err := checkFzfInstalled(); err != nil {
+		return Choice{}, false, err
 	}
 
-	model, ok := result.(selectionModel)
-	if !ok {
-		return Choice{}, false, fmt.Errorf("unexpected selector result type %T", result)
-	}
-	if model.cancelled || model.choice.Value == "" {
+	if len(items) == 0 {
 		return Choice{}, false, nil
 	}
 
-	return model.choice, true, nil
-}
+	// Build input data: format is "Label\tDetails\tValue"
+	var input bytes.Buffer
+	for _, item := range items {
+		// Display format: "Label: Details" for fzf
+		display := item.Label
+		if item.Details != "" {
+			display = fmt.Sprintf("%s: %s", item.Label, item.Details)
+		}
+		// Store mapping: display text -> Choice
+		// We use tab as delimiter between display and value
+		fmt.Fprintf(&input, "%s\t%s\n", display, item.Value)
+	}
 
-type selectionModel struct {
-	list      list.Model
-	choice    Choice
-	cancelled bool
-}
+	// Build fzf command
+	args := []string{
+		"--height=50%",
+		"--reverse",
+		"--border",
+		"--prompt", title + "> ",
+		"--delimiter=\t",
+		"--with-nth=1", // Only show the display part, hide the value
+		"--select-1",   // Auto-select if only one match
+		"--exit-0",     // Exit 0 even if no match (we handle empty)
+	}
 
-func (m selectionModel) Init() tea.Cmd { return nil }
+	cmd := exec.Command("fzf", args...)
+	cmd.Stdin = &input
+	cmd.Stderr = s.out
+	// Don't set cmd.Stdout - let Output() capture it
 
-func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.list.SetSize(msg.Width, msg.Height)
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q", "esc":
-			m.cancelled = true
-			return m, tea.Quit
-		case "enter":
-			selected, ok := m.list.SelectedItem().(Choice)
-			if ok {
-				m.choice = selected
-			}
-			return m, tea.Quit
+	output, err := cmd.Output()
+
+	// Handle exit codes
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		switch exitErr.ExitCode() {
+		case 1:
+			// No match
+			return Choice{}, false, nil
+		case 130:
+			// Interrupted (Ctrl-C, Esc)
+			return Choice{}, false, nil
+		default:
+			return Choice{}, false, fmt.Errorf("fzf failed with exit code %d", exitErr.ExitCode())
 		}
 	}
 
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	return m, cmd
-}
+	if err != nil && !errors.Is(err, exec.ErrNotFound) {
+		return Choice{}, false, fmt.Errorf("run fzf: %w", err)
+	}
 
-func (m selectionModel) View() string {
-	return m.list.View()
+	// Parse output
+	outputStr := strings.TrimSpace(string(output))
+	if outputStr == "" {
+		return Choice{}, false, nil
+	}
+
+	// Parse "display\tvalue" format
+	parts := strings.SplitN(outputStr, "\t", 2)
+	if len(parts) != 2 {
+		return Choice{}, false, fmt.Errorf("unexpected fzf output format: %q", outputStr)
+	}
+
+	selectedValue := parts[1]
+
+	// Find the matching choice
+	for _, item := range items {
+		if item.Value == selectedValue {
+			return item, true, nil
+		}
+	}
+
+	return Choice{}, false, fmt.Errorf("selected value not found in choices: %q", selectedValue)
 }

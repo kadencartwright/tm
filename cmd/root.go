@@ -33,7 +33,7 @@ func DefaultDependencies() Dependencies {
 	return Dependencies{
 		ConfigStore:  config.NewStore(),
 		Discoverer:   &discovery.Service{},
-		Selector:     selector.NewBubbleSelector(os.Stdin, os.Stdout),
+		Selector:     selector.NewFzfSelector(os.Stdin, os.Stdout),
 		Inspector:    worktree.NewInspector(worktree.ExecGitRunner),
 		TmuxLauncher: tmux.NewLauncher(tmux.ExecCommander{}, os.Stdin, os.Stdout, os.Stderr),
 		IsTTY:        selector.IsTTY,
