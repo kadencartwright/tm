@@ -69,11 +69,28 @@ func (s *BubbleSelector) Select(title string, items []Choice) (Choice, bool, err
 		listItems = append(listItems, item)
 	}
 
-	l := list.New(listItems, list.NewDefaultDelegate(), 0, 0)
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.PaddingLeft(0)
+	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.PaddingLeft(0)
+	delegate.Styles.NormalTitle = delegate.Styles.NormalTitle.PaddingLeft(0)
+	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.PaddingLeft(0)
+
+	l := list.New(listItems, delegate, 0, 0)
 	l.Title = title
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
+	l.SetShowFilter(true)
 	l.SetShowHelp(true)
+
+	// Configure KeyMap: disable vim navigation (j/k), keep arrow keys only
+	keyMap := list.DefaultKeyMap()
+	keyMap.CursorUp.SetKeys("up")
+	keyMap.CursorDown.SetKeys("down")
+	keyMap.Filter.SetEnabled(false)
+	l.KeyMap = keyMap
+
+	// Start in filtering state so user can type immediately
+	l.SetFilterState(list.Filtering)
 
 	program := tea.NewProgram(selectionModel{list: l}, tea.WithInput(s.in), tea.WithOutput(s.out))
 	result, err := program.Run()

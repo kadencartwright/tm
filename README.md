@@ -9,6 +9,19 @@
 3. Start the CLI with `go run .`.
 4. Set the repository search path first with `go run . config set search-path ~/code`.
 
+## Repository Selector
+
+When you run `tm`, you'll see a fuzzy-finder style repo selector:
+
+- **Type** to filter repos immediately (like fzf)
+- **↑/↓** arrow keys to navigate the filtered list
+- **Enter** to select and open the repo
+- **Esc**, **q**, or **Ctrl+C** to cancel
+
+> ⚠️ **BREAKING CHANGE**: The selector no longer uses vim-style keybindings. 
+> - Pressing 'j' or 'k' now types into the filter instead of navigating
+> - Use arrow keys for navigation instead
+
 ## Planned workflow
 
 - `tm` loads `search_path` from `~/.config/tm/config.toml` or `$XDG_CONFIG_HOME/tm/config.toml`.
