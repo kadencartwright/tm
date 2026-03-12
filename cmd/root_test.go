@@ -41,6 +41,7 @@ func (f *fakeTmuxCommander) Run(args []string, dir string, _ io.Reader, _, _ io.
 	f.last = append([]string{dir}, args...)
 	return f.err
 }
+func (f *fakeTmuxCommander) DetachClient() error { return nil }
 
 func TestRootCommandNonTTYError(t *testing.T) {
 	root := t.TempDir()

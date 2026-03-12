@@ -28,6 +28,15 @@ When you run `tm`, you'll see an fzf-powered repo selector:
 
 You can customize fzf behavior by setting `FZF_DEFAULT_OPTS` environment variable.
 
+## Nested Session Handling
+
+`tm` can be run from inside an existing tmux session. When you do this, it will:
+1. Automatically detach you from the current tmux session
+2. Create or attach to the requested session
+3. Seamlessly transition you to the new session
+
+This prevents the "sessions should be nested with care" error that tmux normally shows.
+
 ## Planned workflow
 
 - `tm` loads `search_path` from `~/.config/tm/config.toml` or `$XDG_CONFIG_HOME/tm/config.toml`.
